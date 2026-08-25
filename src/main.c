@@ -1,75 +1,59 @@
-#include <stdio.h>
-#include <stdlib.h>
+#include <stdio.h> 
+#include <stdlib.h> 
 #include <string.h>
 #include <readline/history.h>
 #include <readline/readline.h>
-
-#include "history.h"
 #include "token.h"
 #include "lexer.h"
-
+#include "parser.h"
+#include "expand.h"
 int main(void)
 {
     // Display a welcome banner when the shell starts
     printf("=====================================\n");
-    printf("          Shellforge\n");
-    printf("  A Unix Style Shell written in C\n");
+    printf("      Shellforge \n");
+    printf(" A Unix Style Shell written in C\n");
     printf("=====================================\n");
 
-    token_list_t tokens;
-
-    /* Initialize token list */
-    token_list_init(&tokens);
-
-    using_history();
-
-    char *line;
+ token_list_t tokens;
+ pipeline_t pipeline;
+ 
+ char *line;
 
     while (1)
     {
         line = readline("shellforge$ ");
-
-        /* Ctrl + D */
         if (line == NULL)
         {
             printf("\nGoodbye!\n");
             break;
         }
-
-        /* Exit */
-        if (strcmp(line, "exit") == 0)
-        {
-            free(line);
-            printf("Exiting...\n");
-            break;
-        }
-
-        /* Empty input */
         if (strlen(line) == 0)
         {
             free(line);
             continue;
         }
 
-        /* History command */
-        if (strcmp(line, "history") == 0)
-        {
-            print_history();
-            free(line);
-            continue;
-        }
-
-        /* Add command to history */
         add_history(line);
-
-        /* Lexical analysis */
-        lexer(line, &tokens);
-
-        /* Display tokens */
+	lexer(line, &tokens);
         token_print(&tokens);
+        
 
-        free(line);
-    }
+	if(parser(&tokens, &pipeline))
+	{
+		expand_variables(&pipeline);
+    		pipeline_print(&pipeline);
+	}
+        
 
+
+        if (strcmp(line, "exit") == 0)
+        {
+            free(line);
+            printf("Exiting...\n");
+            break;
+        }
+	free(line);
+    }    
     return 0;
 }
