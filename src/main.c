@@ -1,59 +1,194 @@
-#include <stdio.h> 
-#include <stdlib.h> 
+
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <readline/history.h>
 #include <readline/readline.h>
+#include "banker.h"
+#include "producer_consumer.h"
+#include "history.h"
 #include "token.h"
 #include "lexer.h"
 #include "parser.h"
 #include "expand.h"
+#include "builtin.h"
+#include "executor.h"
+#include "shuf.h"
+#include "accent.h"
+#include "jobs.h"
+#include "job_control.h"
+int job_controller_init(void);
+void job_controller_cleanup(void);
+
+
 int main(void)
 {
-    // Display a welcome banner when the shell starts
+
+
+ job_control_init();
+
+    /* Initialize job tracking */
+    jobs_initialize();
+
+    /* Display welcome banner */
     printf("=====================================\n");
-    printf("      Shellforge \n");
+    printf("          Shellforge\n");
     printf(" A Unix Style Shell written in C\n");
     printf("=====================================\n");
 
- token_list_t tokens;
- pipeline_t pipeline;
- 
- char *line;
+    using_history();
+
+    token_list_t tokens;
+    pipeline_t pipeline;
+
+    char *line;
+
+    /* ShellForge accent color */
+    const char *accent = "cyan";
 
     while (1)
     {
-        line = readline("shellforge$ ");
+        /* Create colored prompt */
+        char prompt[100];
+
+        snprintf(
+            prompt,
+            sizeof(prompt),
+            "%sshellforge$ \033[0m",
+            get_accent_code(accent)
+        );
+
+        /* Read command */
+        line = readline(prompt);
+
+        /* Ctrl+D */
         if (line == NULL)
         {
             printf("\nGoodbye!\n");
             break;
         }
+
+        /* Ignore empty input */
         if (strlen(line) == 0)
         {
             free(line);
             continue;
         }
 
-        add_history(line);
-	lexer(line, &tokens);
-        token_print(&tokens);
-        
-
-	if(parser(&tokens, &pipeline))
-	{
-		expand_variables(&pipeline);
-    		pipeline_print(&pipeline);
-	}
-        
-
-
-        if (strcmp(line, "exit") == 0)
+        /* Built-in history command */
+        if (strcmp(line, "history") == 0)
         {
+            print_history();
             free(line);
-            printf("Exiting...\n");
-            break;
+            continue;
         }
-	free(line);
-    }    
+
+        /* Add command to history */
+        add_history(line);
+
+        /* =========================================
+           MILESTONE 2.1 - TOKENIZATION
+           ========================================= */
+
+        lexer(line, &tokens);
+
+        /* Uncomment for debugging */
+        /* token_print(&tokens); */
+
+
+        /* =========================================
+           MILESTONE 2.2 - PARSING
+           ========================================= */
+
+        if (parser(&tokens, &pipeline))
+        {
+            /* Expand environment variables */
+            expand_variables(&pipeline);
+
+
+            /* =====================================
+               CUSTOM COMMAND: shuf Date
+               ===================================== */
+
+            if (pipeline.command_count == 1 &&
+                pipeline.commands[0].argc >= 2 &&
+                strcmp(pipeline.commands[0].argv[0], "shuf") == 0 &&
+                strcmp(pipeline.commands[0].argv[1], "Date") == 0)
+            {
+                shuf_date();
+
+                free(line);
+                continue;
+            }
+
+/* =====================================
+   ACCENT COMMAND
+   ===================================== */
+if (pipeline.command_count == 1 &&
+    pipeline.commands[0].argc == 2 &&
+    strcmp(pipeline.commands[0].argv[0], "accent") == 0)
+{
+    const char *new_accent =
+        get_accent_code(pipeline.commands[0].argv[1]);
+
+    if (new_accent != NULL)
+    {
+        accent = pipeline.commands[0].argv[1];
+    }
+    else
+    {
+        printf("accent: unknown color '%s'\n",
+               pipeline.commands[0].argv[1]);
+        printf("Available: red green yellow blue magenta cyan white\n");
+    }
+
+    free(line);
+    continue;
+}
+/* BANKER'S ALGORITHM */
+if (pipeline.command_count == 1 &&
+    pipeline.commands[0].argc == 1 &&
+    strcmp(pipeline.commands[0].argv[0], "banker") == 0)
+{
+    banker_command();
+    free(line);
+    continue;
+}
+
+/* PRODUCER-CONSUMER */
+if (pipeline.command_count == 1 &&
+    pipeline.commands[0].argc == 1 &&
+    strcmp(pipeline.commands[0].argv[0], "producer_consumer") == 0)
+{
+    producer_consumer_command();
+    free(line);
+    continue;
+}
+            /* =====================================
+               EXIT COMMAND
+               ===================================== */
+
+            if (pipeline.command_count == 1 &&
+                pipeline.commands[0].argc > 0 &&
+                strcmp(pipeline.commands[0].argv[0], "exit") == 0)
+            {
+                free(line);
+                break;
+            }
+
+
+            /* =====================================
+               NORMAL COMMAND EXECUTION
+               ===================================== */
+
+            execute_pipeline(&pipeline);
+        }
+
+        /* Free input line */
+        free(line);
+    }
+
+jobs_shutdown();
+    job_controller_cleanup();
     return 0;
 }
